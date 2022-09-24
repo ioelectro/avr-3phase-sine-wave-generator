@@ -8,7 +8,7 @@ SS_START
 } system_state_e;
 
 system_state_e SS=SS_STOP;
-unsigned char speed_div=1;
+unsigned char pwm_div=1;
 unsigned char f_shift=1;
 
 unsigned char f1=0,f2=0,f3=0;
@@ -36,6 +36,24 @@ const unsigned char sinewave[256]={
 // Functions prototype
 void timer_pwm_stop();
 
+// Voltage Reference: AVCC pin
+#define ADC_VREF_TYPE ((0<<REFS1) | (1<<REFS0) | (1<<ADLAR))
+
+// Read the 8 most significant bits
+// of the AD conversion result
+unsigned char read_adc(unsigned char adc_input)
+{
+ADMUX=adc_input | ADC_VREF_TYPE;
+// Delay needed for the stabilization of the ADC input voltage
+delay_us(10);
+// Start the AD conversion
+ADCSRA|=(1<<ADSC);
+// Wait for the AD conversion to complete
+while ((ADCSRA & (1<<ADIF))==0);
+ADCSRA|=(1<<ADIF);
+return ADCH;
+}
+
 // External Interrupt 0 service routine
 interrupt [EXT_INT0] void ext_int0_isr(void)
 {
@@ -47,7 +65,7 @@ interrupt [EXT_INT0] void ext_int0_isr(void)
 interrupt [TIM0_OVF] void timer0_ovf_isr(void)
 {
   f3=f1+170;
-  OCR0=sinewave[f3]/speed_div;
+  OCR0=sinewave[f3]/pwm_div;
 }
 
 // Timer1 overflow interrupt service routine
@@ -55,8 +73,8 @@ interrupt [TIM1_OVF] void timer1_ovf_isr(void)
 {
   f1+=f_shift;
   f2=f1+85;
-  OCR1AL=sinewave[f1]/speed_div;
-  OCR1BL=sinewave[f2]/speed_div;
+  OCR1AL=sinewave[f1]/pwm_div;
+  OCR1BL=sinewave[f2]/pwm_div;
 }
 
 void timer_pwm_stop()
@@ -72,6 +90,22 @@ void timer_pwm_stop()
   OCR0=0;
 
   SS=SS_STOP;
+}
+
+// 0-100 %
+void set_max_pwm_ds(char max_ds)
+{
+  if(max_ds<1)max_ds=1;
+  if(max_ds>100)max_ds=100;
+  pwm_div=100.0/max_ds;
+}
+
+// 1-30 ---> 15.3 Hz - 461 Hz
+void set_wave_shift_speed(char shift)
+{
+  if(shift<1)shift=1;
+  else if(shift>30)shift=30;
+  f_shift=shift;
 }
 
 void timer_pwm_start()
@@ -121,6 +155,14 @@ void timer_pwm_start()
   SS=SS_START;
 }
 
+int get_adc(unsigned char ch)
+{
+  int i,sum;
+  for(i=0,sum=0;i<20;i++)sum+=read_adc(ch);
+  sum=sum/20.0;
+  return sum;
+}
+
 void main(void)
 {
   // Declare your local variables here
@@ -161,6 +203,17 @@ void main(void)
   MCUCSR=(0<<ISC2);
   GIFR=(0<<INTF1) | (1<<INTF0) | (0<<INTF2);
 
+  // ADC initialization
+  // ADC Clock frequency: 1000/000 kHz
+  // ADC Voltage Reference: AVCC pin
+  // ADC Auto Trigger Source: ADC Stopped
+  // Only the 8 most significant bits of
+  // the AD conversion result are used
+  ADMUX=ADC_VREF_TYPE;
+  ADCSRA=(1<<ADEN) | (0<<ADSC) | (0<<ADATE) | (0<<ADIF) | (0<<ADIE) | (0<<ADPS2) | (1<<ADPS1) | (1<<ADPS0);
+  SFIOR=(0<<ADTS2) | (0<<ADTS1) | (0<<ADTS0);
+
+
   // Global enable interrupts
   #asm("sei")
 
@@ -168,6 +221,7 @@ void main(void)
   
   while (1)
   {
-
+    set_max_pwm_ds(get_adc(0)/2.55);
+    set_wave_shift_speed(get_adc(1)/20);
   }
 }
