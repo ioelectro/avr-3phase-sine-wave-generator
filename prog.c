@@ -5,11 +5,11 @@ Automatic Program Generator
 © Copyright 1998-2014 Pavel Haiduc, HP InfoTech s.r.l.
 http://www.hpinfotech.com
 
-Project : 
-Version : 
+Project : AVR 3 Phase Sine Wave Generator 
+Version : 0.1
 Date    : 24/09/2022
-Author  : 
-Company : 
+Author  : Liyanboy74
+Company : IOElectro
 Comments: 
 
 
