@@ -1,6 +1,6 @@
-
 #include <mega32a.h>
 #include <delay.h>
+#include <stdio.h>
 
 typedef enum{
 SS_STOP=0,
@@ -8,10 +8,11 @@ SS_START
 } system_state_e;
 
 system_state_e SS=SS_STOP;
-unsigned char pwm_div=1;
-unsigned char f_shift=1;
+float pwm_div=1;
+int f_shift=1;
 
 unsigned char f1=0,f2=0,f3=0;
+unsigned char t1,t2,t3;
 
 // Sine Wave D=127 Center=127 Degree=360
 const unsigned char sinewave[256]={
@@ -65,7 +66,9 @@ interrupt [EXT_INT0] void ext_int0_isr(void)
 interrupt [TIM0_OVF] void timer0_ovf_isr(void)
 {
   f3=f1+170;
-  OCR0=sinewave[f3]/pwm_div;
+  t3=sinewave[f3]*pwm_div;
+  if(!t3)t3=1;
+  OCR0=t3;
 }
 
 // Timer1 overflow interrupt service routine
@@ -73,8 +76,12 @@ interrupt [TIM1_OVF] void timer1_ovf_isr(void)
 {
   f1+=f_shift;
   f2=f1+85;
-  OCR1AL=sinewave[f1]/pwm_div;
-  OCR1BL=sinewave[f2]/pwm_div;
+  t1=sinewave[f1]*pwm_div;
+  t2=sinewave[f2]*pwm_div;
+  if(!t1)t1=1;
+  if(!t2)t2=1;
+  OCR1AL=t1;
+  OCR1BL=t2;
 }
 
 void timer_pwm_stop()
@@ -93,15 +100,16 @@ void timer_pwm_stop()
 }
 
 // 0-100 %
-void set_max_pwm_ds(char max_ds)
+void set_max_pwm_ds(int max_ds)
 {
   if(max_ds<1)max_ds=1;
   if(max_ds>100)max_ds=100;
-  pwm_div=100.0/max_ds;
+
+  pwm_div=max_ds/100.0;
 }
 
 // 1-30 ---> 15.3 Hz - 461 Hz
-void set_wave_shift_speed(char shift)
+void set_wave_shift_speed(int shift)
 {
   if(shift<1)shift=1;
   else if(shift>30)shift=30;
@@ -213,6 +221,18 @@ void main(void)
   ADCSRA=(1<<ADEN) | (0<<ADSC) | (0<<ADATE) | (0<<ADIF) | (0<<ADIE) | (0<<ADPS2) | (1<<ADPS1) | (1<<ADPS0);
   SFIOR=(0<<ADTS2) | (0<<ADTS1) | (0<<ADTS0);
 
+  // USART initialization
+  // Communication Parameters: 8 Data, 1 Stop, No Parity
+  // USART Receiver: On
+  // USART Transmitter: On
+  // USART Mode: Asynchronous
+  // USART Baud Rate: 9600
+  // UCSRA=(0<<RXC) | (0<<TXC) | (0<<UDRE) | (0<<FE) | (0<<DOR) | (0<<UPE) | (0<<U2X) | (0<<MPCM);
+  // UCSRB=(0<<RXCIE) | (0<<TXCIE) | (0<<UDRIE) | (1<<RXEN) | (1<<TXEN) | (0<<UCSZ2) | (0<<RXB8) | (0<<TXB8);
+  // UCSRC=(1<<URSEL) | (0<<UMSEL) | (0<<UPM1) | (0<<UPM0) | (0<<USBS) | (1<<UCSZ1) | (1<<UCSZ0) | (0<<UCPOL);
+  // UBRRH=0x00;
+  // UBRRL=0x33;
+
 
   // Global enable interrupts
   #asm("sei")
@@ -222,6 +242,8 @@ void main(void)
   while (1)
   {
     set_max_pwm_ds(get_adc(0)/2.55);
-    set_wave_shift_speed(get_adc(1)/20);
+    set_wave_shift_speed(get_adc(1)/8.5);
+    // printf("Shift:%02d \tPWM_Div:%0.2f\r\n",f_shift,pwm_div);
+    // delay_ms(500);
   }
 }
